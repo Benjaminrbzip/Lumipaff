@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "168765740411",
+    "project_id": "lumipaff",
+    "storage_bucket": "lumipaff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:168765740411:android:ea62f5f94d7f4f421919de",
+        "android_client_info": {
+          "package_name": "com.example.lumipaff"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDHV4uf7mjkfVk9DlHrLjZKmfBgwMJzPVs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
