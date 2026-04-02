@@ -28,9 +28,9 @@ const int ledPins[numButtons] = {
 
 Adafruit_NeoPixel* pixels[numButtons];
 
-// Couleurs de base : tous bleus
+// Couleurs de base : tous orange
 int colorIndex[numButtons] = {
-  2, 2, 2, 2, 2, 2, 2, 2, 2
+  6, 6, 6, 6, 6, 6, 6, 6, 6
 };
 
 bool lastPressed[numButtons] = {false};
@@ -136,7 +136,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) override {
     bleClientConnected = true;
     Serial.println("BLE client connecte");
-    setAllBlue();
+    restoreBaseColors();
     notifyMessage("CONNECTED");
   }
 
@@ -179,9 +179,11 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
       int contour[] = {0, 1, 2, 5, 8, 7, 6, 3};
       for(int step=0; step<8; step++) {
          int pin = contour[step];
+         pixels[pin]->setBrightness(255); // Max luminosité pour le blanc
          pixels[pin]->setPixelColor(0, pixels[pin]->Color(255,255,255));
          pixels[pin]->show();
-         delay(20);
+         delay(50);
+         pixels[pin]->setBrightness(50); // Retour luminosité normale
          pixels[pin]->setPixelColor(0, currentOuterColor);
          pixels[pin]->show();
       }
@@ -202,7 +204,7 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
     } else if (cmd == "TAUPE") {
       inCatchMode = false;
       gameMode = 2;
-      setAllBlue();
+      restoreBaseColors();
       notifyMessage("OK:TAUPE");
     } else if (cmd.startsWith("T:")) {
       int firstColon = cmd.indexOf(':', 2);
@@ -210,7 +212,7 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
         int idx = cmd.substring(2, firstColon).toInt();
         int state = cmd.substring(firstColon + 1).toInt();
         if (idx >= 0 && idx < 9) {
-          if (state == 0) pixels[idx]->setPixelColor(0, pixels[idx]->Color(0,0,255));
+          if (state == 0) { setButtonColor(idx, colorIndex[idx]); } // Couleur de base
           else if (state == 1) pixels[idx]->setPixelColor(0, pixels[idx]->Color(0,255,0));
           else if (state == 2) pixels[idx]->setPixelColor(0, pixels[idx]->Color(255,80,0));
           else if (state == 3) pixels[idx]->setPixelColor(0, pixels[idx]->Color(0,0,0));
@@ -228,19 +230,51 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
       pixels[7]->setPixelColor(0, pixels[7]->Color(50,0,50)); // Dim Magenta
       for (int i = 0; i < numButtons; i++) pixels[i]->show();
       notifyMessage("OK:SIMON");
+    } else if (cmd == "SIMON_HARD") {
+      inCatchMode = false;
+      gameMode = 4;
+      // 9 couleurs dim uniques
+      pixels[0]->setPixelColor(0, pixels[0]->Color(50,0,0));     // Dim Red
+      pixels[1]->setPixelColor(0, pixels[1]->Color(0,50,0));     // Dim Green
+      pixels[2]->setPixelColor(0, pixels[2]->Color(0,0,50));     // Dim Blue
+      pixels[3]->setPixelColor(0, pixels[3]->Color(50,50,0));    // Dim Yellow
+      pixels[4]->setPixelColor(0, pixels[4]->Color(0,50,50));    // Dim Cyan
+      pixels[5]->setPixelColor(0, pixels[5]->Color(50,0,50));    // Dim Magenta
+      pixels[6]->setPixelColor(0, pixels[6]->Color(50,25,0));    // Dim Orange
+      pixels[7]->setPixelColor(0, pixels[7]->Color(50,50,50));   // Dim White
+      pixels[8]->setPixelColor(0, pixels[8]->Color(25,0,50));    // Dim Violet
+      for (int i = 0; i < numButtons; i++) pixels[i]->show();
+      notifyMessage("OK:SIMON_HARD");
     } else if (cmd.startsWith("S:")) {
       int firstColon = cmd.indexOf(':', 2);
       if (firstColon != -1) {
         int idx = cmd.substring(2, firstColon).toInt();
         int state = cmd.substring(firstColon + 1).toInt();
         if (idx >= 0 && idx < 9) {
-           uint32_t c = pixels[idx]->Color(0,0,0);
-           if (idx == 1) c = (state == 1) ? pixels[1]->Color(255,0,0) : pixels[1]->Color(50,0,0);
-           if (idx == 3) c = (state == 1) ? pixels[3]->Color(0,255,0) : pixels[3]->Color(0,50,0);
-           if (idx == 4) c = (state == 1) ? pixels[4]->Color(255,255,0) : pixels[4]->Color(50,50,0);
-           if (idx == 5) c = (state == 1) ? pixels[5]->Color(0,0,255) : pixels[5]->Color(0,0,50);
-           if (idx == 7) c = (state == 1) ? pixels[7]->Color(255,0,255) : pixels[7]->Color(50,0,50);
-           pixels[idx]->setPixelColor(0, c);
+           // Couleurs bright et dim pour chaque bouton
+           uint32_t brightColors[9] = {
+             pixels[0]->Color(255,0,0),     // Red
+             pixels[1]->Color(0,255,0),     // Green
+             pixels[2]->Color(0,0,255),     // Blue
+             pixels[3]->Color(255,255,0),   // Yellow
+             pixels[4]->Color(0,255,255),   // Cyan
+             pixels[5]->Color(255,0,255),   // Magenta
+             pixels[6]->Color(255,120,0),   // Orange
+             pixels[7]->Color(255,255,255), // White
+             pixels[8]->Color(140,0,255)    // Violet
+           };
+           uint32_t dimColors[9] = {
+             pixels[0]->Color(50,0,0),
+             pixels[1]->Color(0,50,0),
+             pixels[2]->Color(0,0,50),
+             pixels[3]->Color(50,50,0),
+             pixels[4]->Color(0,50,50),
+             pixels[5]->Color(50,0,50),
+             pixels[6]->Color(50,25,0),
+             pixels[7]->Color(50,50,50),
+             pixels[8]->Color(25,0,50)
+           };
+           pixels[idx]->setPixelColor(0, (state == 1) ? brightColors[idx] : dimColors[idx]);
            pixels[idx]->show();
         }
       }

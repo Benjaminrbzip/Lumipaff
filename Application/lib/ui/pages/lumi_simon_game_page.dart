@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../res/colors.dart';
+import '../../res/assets.dart';
 import '../widgets/secondary_button.dart';
 import '../widgets/game_countdown_overlay.dart';
 import '../widgets/game_over_screen.dart';
@@ -9,6 +10,7 @@ import '../../services/firebase_service.dart';
 import '../../services/bluetooth_service.dart';
 
 enum SimonPhase { memorise, reproduit, showResult }
+enum SimonDifficulty { normal, hard }
 
 class LumiSimonGamePage extends StatefulWidget {
   const LumiSimonGamePage({super.key});
@@ -18,36 +20,44 @@ class LumiSimonGamePage extends StatefulWidget {
 }
 
 class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
-  // Les 5 boutons actifs de la croix (indices ESP32)
-  // Bouton 2 = index 1 (haut)
-  // Bouton 4 = index 3 (gauche)
-  // Bouton 5 = index 4 (centre)
-  // Bouton 6 = index 5 (droite)
-  // Bouton 8 = index 7 (bas)
-  static const List<int> simonButtons = [1, 3, 4, 5, 7];
+  // Normal: 5 boutons en croix
+  static const List<int> normalButtons = [1, 3, 4, 5, 7];
+  // Hard: tous les 9 boutons
+  static const List<int> hardButtons = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 
-  // Couleurs associées (pour l'affichage écran)
-  static const Map<int, Color> buttonColors = {
-    1: Colors.redAccent,     // Haut = Rouge
-    3: Colors.greenAccent,   // Gauche = Vert
-    4: Colors.yellowAccent,  // Centre = Jaune
-    5: Colors.blueAccent,    // Droite = Bleu
-    7: Colors.purpleAccent,  // Bas = Magenta
+  // Couleurs associées (affichage écran)
+  static const Map<int, Color> allButtonColors = {
+    0: Colors.redAccent,     // Rouge
+    1: Colors.greenAccent,   // Vert
+    2: Colors.blueAccent,    // Bleu
+    3: Colors.yellowAccent,  // Jaune
+    4: Colors.cyanAccent,    // Cyan
+    5: Colors.purpleAccent,  // Magenta
+    6: Colors.orangeAccent,  // Orange
+    7: Colors.white,         // Blanc
+    8: Color(0xFFAA55FF),    // Violet
   };
 
-  static const Map<int, String> buttonLabels = {
-    1: '▲',
-    3: '◀',
-    4: '●',
-    5: '▶',
-    7: '▼',
+  // Rotation de la flèche (base = pointe à gauche)
+  // Pour tourner : haut=π/2, droite=π, bas=-π/2, diagonales en conséquence
+  static const Map<int, double> arrowRotations = {
+    0: math.pi / 4,       // ↖ haut-gauche
+    1: math.pi / 2,       // ▲ haut
+    2: 3 * math.pi / 4,   // ↗ haut-droite
+    3: 0,                 // ◀ gauche (défaut)
+    // 4 = centre, pas de flèche
+    5: math.pi,           // ▶ droite
+    6: -math.pi / 4,      // ↙ bas-gauche
+    7: -math.pi / 2,      // ▼ bas
+    8: -3 * math.pi / 4,  // ↘ bas-droite
   };
 
+  SimonDifficulty? _difficulty; // null = pas encore choisi
   int _level = 1;
   SimonPhase _phase = SimonPhase.memorise;
-  List<int> _sequence = []; // La séquence complète à reproduire
-  int _playerStep = 0; // Position du joueur dans la séquence
-  int? _highlightedButton; // Bouton actuellement allumé (pour l'affichage)
+  List<int> _sequence = [];
+  int _playerStep = 0;
+  int? _highlightedButton;
 
   bool _gameStarted = false;
   bool _gameOver = false;
@@ -57,6 +67,12 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
 
   final math.Random _rng = math.Random();
 
+  List<int> get _activeButtons =>
+      _difficulty == SimonDifficulty.hard ? hardButtons : normalButtons;
+
+  String get _firebaseMode =>
+      _difficulty == SimonDifficulty.hard ? 'lumi_simon_hard' : 'lumi_simon';
+
   @override
   void initState() {
     super.initState();
@@ -64,8 +80,8 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
       if (mounted && _gameStarted && !_gameOver && _phase == SimonPhase.reproduit) {
         int? btn = event['buttonValue'];
         if (btn != null) {
-          int index = btn - 1; // BTN:1 = index 0
-          if (simonButtons.contains(index)) {
+          int index = btn - 1;
+          if (_activeButtons.contains(index)) {
             _onPlayerPress(index);
           }
         }
@@ -82,7 +98,11 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
   }
 
   void _startGame() {
-    AppBleService().sendCommand("SIMON");
+    if (_difficulty == SimonDifficulty.hard) {
+      AppBleService().sendCommand("SIMON_HARD");
+    } else {
+      AppBleService().sendCommand("SIMON");
+    }
     setState(() {
       _level = 1;
       _sequence = [];
@@ -94,8 +114,7 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
   }
 
   void _addStepAndShowSequence() {
-    // Ajouter un bouton aléatoire à la séquence
-    int nextButton = simonButtons[_rng.nextInt(simonButtons.length)];
+    int nextButton = _activeButtons[_rng.nextInt(_activeButtons.length)];
     _sequence.add(nextButton);
 
     setState(() {
@@ -104,16 +123,13 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
       _highlightedButton = null;
     });
 
-    // Montrer la séquence avec un délai
     _showSequence();
   }
 
   void _showSequence() {
     int stepIndex = 0;
-    // Délai entre chaque note : plus c'est avancé, plus c'est rapide
     int delayMs = math.max(300, 700 - (_level * 30));
 
-    // Petit délai au démarrage pour laisser le temps de lire "MEMORISE"
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted || _gameOver) return;
 
@@ -126,11 +142,9 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
         if (stepIndex < _sequence.length) {
           int btn = _sequence[stepIndex];
 
-          // Allumer le bouton
           setState(() => _highlightedButton = btn);
           AppBleService().sendCommand("S:$btn:1");
 
-          // Eteindre après un court instant
           Future.delayed(Duration(milliseconds: (delayMs * 0.6).round()), () {
             if (!mounted) return;
             setState(() => _highlightedButton = null);
@@ -140,7 +154,6 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
           stepIndex++;
         } else {
           timer.cancel();
-          // Passer en phase reproduction
           Future.delayed(Duration(milliseconds: delayMs), () {
             if (!mounted || _gameOver) return;
             setState(() {
@@ -156,7 +169,6 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
   void _onPlayerPress(int buttonIndex) {
     if (_phase != SimonPhase.reproduit || _gameOver) return;
 
-    // Flash visuel du bouton pressé
     setState(() => _highlightedButton = buttonIndex);
     AppBleService().sendCommand("S:$buttonIndex:1");
     Future.delayed(const Duration(milliseconds: 200), () {
@@ -165,28 +177,22 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
       AppBleService().sendCommand("S:$buttonIndex:0");
     });
 
-    // Vérification
     if (buttonIndex == _sequence[_playerStep]) {
-      // Correct !
       _playerStep++;
       if (_playerStep >= _sequence.length) {
-        // Séquence complète — niveau suivant !
         setState(() {
           _phase = SimonPhase.showResult;
           _level++;
         });
-
-        // Petit flash de victoire avant le prochain niveau
         Future.delayed(const Duration(milliseconds: 800), () {
           if (!mounted || _gameOver) return;
           _addStepAndShowSequence();
         });
       }
     } else {
-      // ERREUR — Game Over !
       _displayTimer?.cancel();
       AppBleService().sendCommand("BASE");
-      FirebaseService().saveScore(gameMode: 'lumi_simon', level: _level);
+      FirebaseService().saveScore(gameMode: _firebaseMode, level: _level);
       setState(() => _gameOver = true);
     }
   }
@@ -211,9 +217,9 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
                     fontWeight: FontWeight.w400,
                   ),
                 ),
-                
+
                 const Spacer(flex: 2),
-                
+
                 // Level Indicator
                 Text(
                   'Level : $_level',
@@ -223,9 +229,35 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                
+
+                if (_difficulty != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _difficulty == SimonDifficulty.hard
+                            ? Colors.redAccent
+                            : kCyanColor,
+                      ),
+                    ),
+                    child: Text(
+                      _difficulty == SimonDifficulty.hard ? 'HARD' : 'NORMAL',
+                      style: TextStyle(
+                        color: _difficulty == SimonDifficulty.hard
+                            ? Colors.redAccent
+                            : kCyanColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 48),
-                
+
                 // Phase indicator
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
@@ -248,44 +280,17 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
                     ),
                   ),
                 ),
-                
+
                 const Spacer(flex: 1),
 
-                // Cross layout for the 5 Simon buttons
-                SizedBox(
-                  width: 240,
-                  height: 240,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Haut (index 1)
-                      Positioned(
-                        top: 0,
-                        child: _buildSimonButton(1),
-                      ),
-                      // Gauche (index 3)
-                      Positioned(
-                        left: 0,
-                        child: _buildSimonButton(3),
-                      ),
-                      // Centre (index 4)
-                      _buildSimonButton(4),
-                      // Droite (index 5)
-                      Positioned(
-                        right: 0,
-                        child: _buildSimonButton(5),
-                      ),
-                      // Bas (index 7)
-                      Positioned(
-                        bottom: 0,
-                        child: _buildSimonButton(7),
-                      ),
-                    ],
-                  ),
-                ),
+                // Button layout
+                if (_difficulty == SimonDifficulty.hard)
+                  _buildHardGrid()
+                else
+                  _buildNormalCross(),
 
                 const Spacer(flex: 2),
-                
+
                 // Sequence progress
                 if (_phase == SimonPhase.reproduit)
                   Padding(
@@ -298,9 +303,9 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
                       ),
                     ),
                   ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Stop Game Button
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40.0),
@@ -315,8 +320,11 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
               ],
             ),
           ),
+          // Difficulty selection
+          if (_difficulty == null)
+            _buildDifficultySelection(),
           // Countdown overlay
-          if (!_gameStarted)
+          if (_difficulty != null && !_gameStarted)
             GameCountdownOverlay(
               onFinished: () {
                 setState(() => _gameStarted = true);
@@ -326,7 +334,9 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
           // Game Over screen
           if (_gameOver)
             GameOverScreen(
-              gameName: 'Lumi Simon',
+              gameName: _difficulty == SimonDifficulty.hard
+                  ? 'Lumi Simon (Hard)'
+                  : 'Lumi Simon',
               level: _level,
               onExit: () => Navigator.pop(context),
             ),
@@ -335,9 +345,153 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
     );
   }
 
+  Widget _buildDifficultySelection() {
+    return Container(
+      color: kPrimaryBackgroundColor.withOpacity(0.97),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'LUMI SIMON',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 36,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Choisis ta difficulté',
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 48),
+            // Normal button
+            GestureDetector(
+              onTap: () => setState(() => _difficulty = SimonDifficulty.normal),
+              child: Container(
+                width: 220,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: kCyanColor, width: 2),
+                  color: kCyanColor.withOpacity(0.1),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'NORMAL',
+                      style: TextStyle(
+                        color: kCyanColor,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '5 boutons en croix',
+                      style: TextStyle(
+                        color: kCyanColor.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Hard button
+            GestureDetector(
+              onTap: () => setState(() => _difficulty = SimonDifficulty.hard),
+              child: Container(
+                width: 220,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.redAccent, width: 2),
+                  color: Colors.redAccent.withOpacity(0.1),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'HARD',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '9 boutons — 9 couleurs',
+                      style: TextStyle(
+                        color: Colors.redAccent.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 48),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
+              child: SecondaryButton(
+                label: 'Retour',
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNormalCross() {
+    return SizedBox(
+      width: 240,
+      height: 240,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(top: 0, child: _buildSimonButton(1)),
+          Positioned(left: 0, child: _buildSimonButton(3)),
+          _buildSimonButton(4),
+          Positioned(right: 0, child: _buildSimonButton(5)),
+          Positioned(bottom: 0, child: _buildSimonButton(7)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHardGrid() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 50.0),
+      child: AspectRatio(
+        aspectRatio: 1.0,
+        child: GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: 9,
+          itemBuilder: (context, index) => _buildSimonButton(index),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSimonButton(int index) {
     bool isHighlighted = _highlightedButton == index;
-    Color baseColor = buttonColors[index] ?? Colors.grey;
+    Color baseColor = allButtonColors[index] ?? Colors.grey;
     Color displayColor = isHighlighted ? baseColor : baseColor.withOpacity(0.25);
 
     return AnimatedContainer(
@@ -362,14 +516,24 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
         ),
       ),
       child: Center(
-        child: Text(
-          buttonLabels[index] ?? '',
-          style: TextStyle(
-            color: isHighlighted ? Colors.white : Colors.white38,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        child: index == 4
+            ? Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isHighlighted ? Colors.white : Colors.white38,
+                ),
+              )
+            : Transform.rotate(
+                angle: arrowRotations[index] ?? 0,
+                child: Image.asset(
+                  AppAssets.iconArrow,
+                  width: 28,
+                  height: 28,
+                  color: isHighlighted ? Colors.white : Colors.white38,
+                ),
+              ),
       ),
     );
   }

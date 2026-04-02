@@ -9,6 +9,7 @@ class AppAssets {
 
   // Game Icons
   static const String iconHeart = 'assets/icons/game/ic_heart.svg';
+  static const String iconArrow = 'assets/icons/game/fleche.png';
 
   // Pod Icons
   static const String iconBluetooth = 'assets/icons/pod/bluetooth-icon.svg';

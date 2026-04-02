@@ -11,7 +11,7 @@ class LeaderboardPage extends StatefulWidget {
 }
 
 class _LeaderboardPageState extends State<LeaderboardPage> {
-  int _selectedTabIndex = 0; // 0: Taupe, 1: Catch, 2: Simon
+  int _selectedTabIndex = 0; // 0: Taupe, 1: Catch, 2: Simon, 3: Simon Hard
   bool _isLoading = true;
   List<Map<String, dynamic>> _leaderboardData = [];
 
@@ -25,14 +25,15 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
     setState(() => _isLoading = true);
     
     String mode;
-    bool isSimon = _selectedTabIndex == 2;
+    bool isLevelMode = _selectedTabIndex == 2 || _selectedTabIndex == 3;
     if (_selectedTabIndex == 0) mode = 'lumi_taupe';
     else if (_selectedTabIndex == 1) mode = 'lumi_catch';
-    else mode = 'lumi_simon';
+    else if (_selectedTabIndex == 2) mode = 'lumi_simon';
+    else mode = 'lumi_simon_hard';
     
     final db = FirebaseService();
     List<Map<String, dynamic>> results;
-    if (isSimon) {
+    if (isLevelMode) {
       results = await db.getTopLevels(mode);
     } else {
       results = await db.getTopScores(mode);
@@ -166,10 +167,12 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildTab('Lumi Taupe', 0),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   _buildTab('Lumi Catch', 1),
-                  const SizedBox(width: 12),
-                  _buildTab('Lumi Simon', 2),
+                  const SizedBox(width: 8),
+                  _buildTab('Simon', 2),
+                  const SizedBox(width: 8),
+                  _buildTab('Simon Hard', 3),
                 ],
               ),
             ),
@@ -184,10 +187,10 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                   const Expanded(child: Text('Player', style: TextStyle(color: kCyanColor, fontSize: 16))),
                   if (_selectedTabIndex == 1) // Lumi Catch
                     const SizedBox(width: 50, child: Text('Lvl', style: TextStyle(color: kCyanColor, fontSize: 16))),
-                  SizedBox(
-                    width: 60, 
-                    child: Text(_selectedTabIndex == 2 ? 'Level' : 'Score', style: const TextStyle(color: kCyanColor, fontSize: 16), textAlign: TextAlign.right)
-                  ),
+                   SizedBox(
+                     width: 60, 
+                     child: Text((_selectedTabIndex == 2 || _selectedTabIndex == 3) ? 'Level' : 'Score', style: const TextStyle(color: kCyanColor, fontSize: 16), textAlign: TextAlign.right)
+                   ),
                 ],
               ),
             ),
@@ -203,7 +206,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                       separatorBuilder: (context, index) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final item = _leaderboardData[index];
-                        final val = _selectedTabIndex == 2 ? item['level'] ?? 0 : item['score'] ?? 0;
+                        final val = (_selectedTabIndex == 2 || _selectedTabIndex == 3) ? item['level'] ?? 0 : item['score'] ?? 0;
                         return _buildScoreRow(index + 1, item['username'] ?? 'Joueur', val, level: item['level']);
                       },
                     ),
