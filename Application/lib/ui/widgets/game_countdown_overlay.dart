@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../res/colors.dart';
+import '../../services/bluetooth_service.dart';
 
 /// A full-screen 3-2-1-GO countdown overlay with 3 concentric colored circles
 /// that each unwrap over their associated second, plus pulse waves, rotating
@@ -87,6 +88,7 @@ class _GameCountdownOverlayState extends State<GameCountdownOverlay>
   }
 
   void _startCountdown() {
+    AppBleService().sendCommand("COUNT:3");
     _scaleController.forward(from: 0);
     _pulseWaveController.forward(from: 0);
     _circleController.forward(from: 0);
@@ -97,6 +99,7 @@ class _GameCountdownOverlayState extends State<GameCountdownOverlay>
 
         if (_currentCount > 1) {
           setState(() => _currentCount--);
+          AppBleService().sendCommand("COUNT:$_currentCount");
           _scaleController.forward(from: 0);
           _pulseWaveController.forward(from: 0);
           _circleController.forward(from: 0);

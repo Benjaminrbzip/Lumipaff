@@ -187,32 +187,54 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
     });
   }
 
+  bool _isPaused = false;
+
   void _onPush() {
-    if (!_isPlaying) return;
+    if (!_isPlaying || _isPaused) return;
 
     setState(() {
       if (_lightIndex == 4) {
+        // Bleu — succès parfait
         _score += 30;
         _flashBackground(Colors.blueAccent.withOpacity(0.3));
-        _nextLevel();
+        _pauseAndContinue(success: true);
       } else if (_lightIndex == 3 || _lightIndex == 5) {
+        // Vert — succès
         _score += 20;
         _flashBackground(Colors.greenAccent.withOpacity(0.3));
-        _nextLevel();
+        _pauseAndContinue(success: true);
       } else {
+        // Rouge — raté
         _lives--;
         _flashBackground(Colors.red.withOpacity(0.3));
         if (_lives <= 0) {
           _isPlaying = false;
           _gameTimer?.cancel();
+          AppBleService().sendCommand("BASE");
           FirebaseService().saveScore(
             gameMode: 'lumi_catch',
             score: _score,
             level: _currentLevelIndex + 1,
           );
           setState(() => _gameOver = true);
+        } else {
+          // Pause de 1s pour voir la couleur rouge sur l'ERP
+          _pauseAndContinue(success: false);
         }
       }
+    });
+  }
+
+  void _pauseAndContinue({required bool success}) {
+    _isPaused = true;
+    _gameTimer?.cancel();
+    if (success) {
+      AppBleService().sendCommand("CATCH_HIT");
+    }
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted || !_isPlaying) return;
+      _isPaused = false;
+      _nextLevel();
     });
   }
 

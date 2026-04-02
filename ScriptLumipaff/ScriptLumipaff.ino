@@ -28,17 +28,9 @@ const int ledPins[numButtons] = {
 
 Adafruit_NeoPixel* pixels[numButtons];
 
-// Couleurs de base pour identifier les boutons
+// Couleurs de base : tous bleus
 int colorIndex[numButtons] = {
-  0, // Rouge
-  1, // Vert
-  2, // Bleu
-  3, // Jaune
-  4, // Magenta
-  5, // Cyan
-  6, // Orange
-  7, // Violet
-  8  // Blanc
+  2, 2, 2, 2, 2, 2, 2, 2, 2
 };
 
 bool lastPressed[numButtons] = {false};
@@ -56,6 +48,7 @@ bool bleClientConnected = false;
 bool oldBleClientConnected = false;
 
 bool inCatchMode = false;
+int gameMode = 0; // 0=BASE, 1=CATCH, 2=TAUPE, 3=SIMON
 uint32_t currentOuterColor = 0;
 
 uint32_t getColor(Adafruit_NeoPixel& pixel, int index) {
@@ -122,6 +115,7 @@ void setAllRed() {
 
 void setCatchMode() {
   inCatchMode = true;
+  gameMode = 1;
   for (int i = 0; i < numButtons; i++) {
     pixels[i]->setPixelColor(0, pixels[i]->Color(0, 0, 0));
     pixels[i]->show();
@@ -166,36 +160,88 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
       notifyMessage("PONG");
     } else if (cmd == "BASE") {
       inCatchMode = false;
+      gameMode = 0;
       restoreBaseColors();
       notifyMessage("OK:BASE");
-    } else if (cmd == "BLUE") {
-      inCatchMode = false;
-      setAllBlue();
-      notifyMessage("OK:BLUE");
-    } else if (cmd == "GREEN") {
-      inCatchMode = false;
-      setAllGreen();
-      notifyMessage("OK:GREEN");
-    } else if (cmd == "RED") {
-      inCatchMode = false;
-      setAllRed();
-      notifyMessage("OK:RED");
+    } else if (cmd.startsWith("COUNT:")) {
+      int count = cmd.substring(6).toInt();
+      for (int i = 0; i < numButtons; i++) {
+        if (count == 3) pixels[i]->setPixelColor(0, pixels[i]->Color(0, 0, 255));
+        else if (count == 2) pixels[i]->setPixelColor(0, pixels[i]->Color(255, 80, 0));
+        else if (count == 1) pixels[i]->setPixelColor(0, pixels[i]->Color(255, 0, 0));
+        else pixels[i]->setPixelColor(0, pixels[i]->Color(0, 0, 255)); // defaut
+        pixels[i]->show();
+      }
     } else if (cmd == "CATCH") {
       setCatchMode();
       notifyMessage("OK:CATCH");
+    } else if (cmd == "CATCH_HIT") {
+      int contour[] = {0, 1, 2, 5, 8, 7, 6, 3};
+      for(int step=0; step<8; step++) {
+         int pin = contour[step];
+         pixels[pin]->setPixelColor(0, pixels[pin]->Color(255,255,255));
+         pixels[pin]->show();
+         delay(20);
+         pixels[pin]->setPixelColor(0, currentOuterColor);
+         pixels[pin]->show();
+      }
     } else if (cmd.startsWith("IDX:")) {
       if (inCatchMode) {
         int idx = cmd.substring(4).toInt();
-        // Définir la couleur globale du tour en fonction de la position du jeu (3,5->Vert, Reste->Rouge)
-        if (idx == 3 || idx == 5) currentOuterColor = pixels[0]->Color(0, 255, 0); // Vert
+        if (idx == 4) currentOuterColor = pixels[0]->Color(0, 0, 255); // Bleu
+        else if (idx == 3 || idx == 5) currentOuterColor = pixels[0]->Color(0, 255, 0); // Vert
         else currentOuterColor = pixels[0]->Color(255, 0, 0); // Rouge
 
-        // Appliquer cette couleur à TOUT le contour
         for (int i = 0; i < numButtons; i++) {
           if (i != 4) {
             pixels[i]->setPixelColor(0, currentOuterColor);
             pixels[i]->show();
           }
+        }
+      }
+    } else if (cmd == "TAUPE") {
+      inCatchMode = false;
+      gameMode = 2;
+      setAllBlue();
+      notifyMessage("OK:TAUPE");
+    } else if (cmd.startsWith("T:")) {
+      int firstColon = cmd.indexOf(':', 2);
+      if (firstColon != -1) {
+        int idx = cmd.substring(2, firstColon).toInt();
+        int state = cmd.substring(firstColon + 1).toInt();
+        if (idx >= 0 && idx < 9) {
+          if (state == 0) pixels[idx]->setPixelColor(0, pixels[idx]->Color(0,0,255));
+          else if (state == 1) pixels[idx]->setPixelColor(0, pixels[idx]->Color(0,255,0));
+          else if (state == 2) pixels[idx]->setPixelColor(0, pixels[idx]->Color(255,80,0));
+          else if (state == 3) pixels[idx]->setPixelColor(0, pixels[idx]->Color(0,0,0));
+          pixels[idx]->show();
+        }
+      }
+    } else if (cmd == "SIMON") {
+      inCatchMode = false;
+      gameMode = 3;
+      for (int i = 0; i < numButtons; i++) { pixels[i]->setPixelColor(0, pixels[i]->Color(0,0,0)); }
+      pixels[1]->setPixelColor(0, pixels[1]->Color(50,0,0)); // Dim Red
+      pixels[3]->setPixelColor(0, pixels[3]->Color(0,50,0)); // Dim Green
+      pixels[4]->setPixelColor(0, pixels[4]->Color(50,50,0)); // Dim Yellow
+      pixels[5]->setPixelColor(0, pixels[5]->Color(0,0,50)); // Dim Blue
+      pixels[7]->setPixelColor(0, pixels[7]->Color(50,0,50)); // Dim Magenta
+      for (int i = 0; i < numButtons; i++) pixels[i]->show();
+      notifyMessage("OK:SIMON");
+    } else if (cmd.startsWith("S:")) {
+      int firstColon = cmd.indexOf(':', 2);
+      if (firstColon != -1) {
+        int idx = cmd.substring(2, firstColon).toInt();
+        int state = cmd.substring(firstColon + 1).toInt();
+        if (idx >= 0 && idx < 9) {
+           uint32_t c = pixels[idx]->Color(0,0,0);
+           if (idx == 1) c = (state == 1) ? pixels[1]->Color(255,0,0) : pixels[1]->Color(50,0,0);
+           if (idx == 3) c = (state == 1) ? pixels[3]->Color(0,255,0) : pixels[3]->Color(0,50,0);
+           if (idx == 4) c = (state == 1) ? pixels[4]->Color(255,255,0) : pixels[4]->Color(50,50,0);
+           if (idx == 5) c = (state == 1) ? pixels[5]->Color(0,0,255) : pixels[5]->Color(0,0,50);
+           if (idx == 7) c = (state == 1) ? pixels[7]->Color(255,0,255) : pixels[7]->Color(50,0,50);
+           pixels[idx]->setPixelColor(0, c);
+           pixels[idx]->show();
         }
       }
     } else {
@@ -287,18 +333,6 @@ void loop() {
       String msg = "BTN:" + String(i + 1);
       notifyMessage(msg);
 
-      // Effet de brillance si on clique sur un contour pendant le jeu Catch
-      if (inCatchMode && i != 4) {
-        int contour[] = {0, 1, 2, 5, 8, 7, 6, 3};
-        for(int step=0; step<8; step++) {
-           int pin = contour[step];
-           pixels[pin]->setPixelColor(0, pixels[pin]->Color(255,255,255));
-           pixels[pin]->show();
-           delay(20);
-           pixels[pin]->setPixelColor(0, currentOuterColor); // On remet la vraie couleur au lieu du noir !
-           pixels[pin]->show();
-        }
-      }
     }
 
     lastPressed[i] = isPressed;
