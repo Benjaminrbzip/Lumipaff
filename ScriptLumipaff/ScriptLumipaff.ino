@@ -55,6 +55,8 @@ BLECharacteristic* pRxCharacteristic = nullptr;
 bool bleClientConnected = false;
 bool oldBleClientConnected = false;
 
+bool inCatchMode = false;
+
 uint32_t getColor(Adafruit_NeoPixel& pixel, int index) {
   switch (index) {
     case 0: return pixel.Color(255, 0, 0);       // Rouge
@@ -117,6 +119,16 @@ void setAllRed() {
   }
 }
 
+void setCatchMode() {
+  inCatchMode = true;
+  for (int i = 0; i < numButtons; i++) {
+    pixels[i]->setPixelColor(0, pixels[i]->Color(0, 0, 0));
+    pixels[i]->show();
+  }
+  pixels[4]->setPixelColor(0, pixels[4]->Color(255, 169, 77)); // Milieu statique R,G,B
+  pixels[4]->show();
+}
+
 void notifyMessage(const String& msg) {
   if (bleClientConnected && pTxCharacteristic != nullptr) {
     pTxCharacteristic->setValue(msg.c_str());
@@ -152,17 +164,43 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
     if (cmd == "PING") {
       notifyMessage("PONG");
     } else if (cmd == "BASE") {
+      inCatchMode = false;
       restoreBaseColors();
       notifyMessage("OK:BASE");
     } else if (cmd == "BLUE") {
+      inCatchMode = false;
       setAllBlue();
       notifyMessage("OK:BLUE");
     } else if (cmd == "GREEN") {
+      inCatchMode = false;
       setAllGreen();
       notifyMessage("OK:GREEN");
     } else if (cmd == "RED") {
+      inCatchMode = false;
       setAllRed();
       notifyMessage("OK:RED");
+    } else if (cmd == "CATCH") {
+      setCatchMode();
+      notifyMessage("OK:CATCH");
+    } else if (cmd.startsWith("IDX:")) {
+      if (inCatchMode) {
+        int idx = cmd.substring(4).toInt();
+        // Eteindre tout sauf le milieu
+        for (int i = 0; i < numButtons; i++) {
+          if (i != 4) {
+            pixels[i]->setPixelColor(0, pixels[i]->Color(0, 0, 0));
+            pixels[i]->show();
+          }
+        }
+        // Allumer la cible selon les règles du jeu (3,5->Vert, Res->Rouge)
+        if (idx >= 0 && idx < 9 && idx != 4) {
+           uint32_t c;
+           if (idx == 3 || idx == 5) c = pixels[idx]->Color(0, 255, 0); // Vert
+           else c = pixels[idx]->Color(255, 0, 0); // Rouge
+           pixels[idx]->setPixelColor(0, c);
+           pixels[idx]->show();
+        }
+      }
     } else {
       notifyMessage("UNKNOWN_CMD");
     }
@@ -251,6 +289,19 @@ void loop() {
 
       String msg = "BTN:" + String(i + 1);
       notifyMessage(msg);
+
+      // Effet de brillance si on clique sur un contour pendant le jeu Catch
+      if (inCatchMode && i != 4) {
+        int contour[] = {0, 1, 2, 5, 8, 7, 6, 3};
+        for(int step=0; step<8; step++) {
+           int pin = contour[step];
+           pixels[pin]->setPixelColor(0, pixels[pin]->Color(255,255,255));
+           pixels[pin]->show();
+           delay(20);
+           pixels[pin]->setPixelColor(0, pixels[pin]->Color(0,0,0));
+           pixels[pin]->show();
+        }
+      }
     }
 
     lastPressed[i] = isPressed;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+vb          import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../res/colors.dart';
 import '../../res/assets.dart';
@@ -24,7 +24,6 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _bleService.init();
-    _bleService.startScan();
   }
 
   Widget _buildPodWidget(String name, bool isConnected, {VoidCallback? onTap}) {

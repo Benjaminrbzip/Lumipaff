@@ -7,6 +7,7 @@ import '../widgets/secondary_button.dart';
 import '../widgets/game_countdown_overlay.dart';
 import '../widgets/game_over_screen.dart';
 import '../../services/firebase_service.dart';
+import '../../services/bluetooth_service.dart';
 
 class GameLevel {
   final List<int> pattern;
@@ -39,23 +40,93 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
   int _currentLevelIndex = 0;
   int _patternStep = 0;
   Timer? _gameTimer;
+  StreamSubscription<Map<String, dynamic>>? _bleSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _bleSubscription = AppBleService().buttonEvents.listen((event) {
+      if (mounted && _isPlaying) {
+        if (event['buttonValue'] == 5) {
+          _onPush();
+        }
+      }
+    });
+  }
 
   final List<PatternDef> _patterns = [
     PatternDef([0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1], 1.0),
     PatternDef([0, 1, 2, 3, 4, 5, 6, 7, 8], 1.0),
     PatternDef([8, 7, 6, 5, 4, 3, 2, 1, 0], 1.0),
-    PatternDef([0, 1, 0, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8, 7, 6, 5, 4, 3, 2, 1], 1.35),
-    PatternDef([0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1], 1.2),
+    PatternDef([
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      7,
+      8,
+      7,
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+    ], 1.35),
+    PatternDef([
+      0,
+      1,
+      2,
+      3,
+      2,
+      1,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      7,
+      6,
+      5,
+      6,
+      7,
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+    ], 1.2),
     PatternDef([4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5], 1.0),
   ];
 
   @override
   void dispose() {
+    AppBleService().sendCommand("BASE");
+    _bleSubscription?.cancel();
     _gameTimer?.cancel();
     super.dispose();
   }
 
   void _startGame() {
+    AppBleService().sendCommand("CATCH");
     setState(() {
       _score = 0;
       _lives = 3;
@@ -85,31 +156,32 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
     for (int i = 0; i < _currentLevelIndex; i++) {
       extraSpeed *= 0.85;
     }
-    
+
     // Vitesse de base innatteignable (40ms) + la portion variable retravaillée
     int globalSpeed = (40.0 + extraSpeed).round();
 
     final def = _patterns[_currentLevelIndex % _patterns.length];
     int finalSpeedMs = (globalSpeed * def.speedFactor).round();
-    
+
     return GameLevel(def.sequence, finalSpeedMs);
   }
 
   void _timerTick() {
     if (!_isPlaying) return;
-    
+
     _gameTimer?.cancel();
     final level = _getCurrentLevel();
 
     _gameTimer = Timer(Duration(milliseconds: level.baseSpeedMs), () {
       if (!mounted || !_isPlaying) return;
-      
+
       setState(() {
         _patternStep++;
         if (_patternStep >= level.pattern.length) {
           _patternStep = 0;
         }
         _lightIndex = level.pattern[_patternStep];
+        AppBleService().sendCommand("IDX:${_lightIndex}");
       });
       _timerTick();
     });
@@ -134,9 +206,9 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
           _isPlaying = false;
           _gameTimer?.cancel();
           FirebaseService().saveScore(
-            gameMode: 'lumi_catch', 
-            score: _score, 
-            level: _currentLevelIndex + 1
+            gameMode: 'lumi_catch',
+            score: _score,
+            level: _currentLevelIndex + 1,
           );
           setState(() => _gameOver = true);
         }
@@ -174,8 +246,14 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: isOn ? glowColor : Colors.white24,
-        boxShadow: isOn 
-            ? [BoxShadow(color: glowColor.withOpacity(0.8), blurRadius: 16, spreadRadius: 2)]
+        boxShadow: isOn
+            ? [
+                BoxShadow(
+                  color: glowColor.withOpacity(0.8),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                ),
+              ]
             : null,
       ),
     );
@@ -191,8 +269,8 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
             width: 36,
             height: 36,
             colorFilter: ColorFilter.mode(
-               index < _lives ? kCyanColor : Colors.white24, 
-               BlendMode.srcIn
+              index < _lives ? kCyanColor : Colors.white24,
+              BlendMode.srcIn,
             ),
           ),
         );
@@ -210,7 +288,9 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
           // Main game content
           AnimatedContainer(
             duration: const Duration(milliseconds: 100),
-            color: _flashColor == Colors.transparent ? kPrimaryBackgroundColor : _flashColor,
+            color: _flashColor == Colors.transparent
+                ? kPrimaryBackgroundColor
+                : _flashColor,
             child: SafeArea(
               child: Column(
                 children: [
@@ -228,7 +308,10 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: kCyanColor.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(10),
@@ -236,7 +319,10 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
                         ),
                         child: Text(
                           'Lvl ${_currentLevelIndex + 1}',
-                          style: const TextStyle(color: kCyanColor, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: kCyanColor,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -290,12 +376,18 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
                         height: 156,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: kPrimaryButtonColor, width: 4),
+                          border: Border.all(
+                            color: kPrimaryButtonColor,
+                            width: 4,
+                          ),
                         ),
                       ),
                       Column(
                         mainAxisSize: MainAxisSize.min,
-                        children: List.generate(9, (index) => _buildCircle(index)),
+                        children: List.generate(
+                          9,
+                          (index) => _buildCircle(index),
+                        ),
                       ),
                     ],
                   ),
