@@ -1,13 +1,17 @@
 #include <Wire.h>
 #include <Adafruit_MPR121.h>
 #include <Adafruit_NeoPixel.h>
-#include "BluetoothSerial.h"
+
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include <BLE2902.h>
 
 Adafruit_MPR121 cap = Adafruit_MPR121();
-BluetoothSerial SerialBT;
 
 const int numButtons = 9;
 const int numPixelsPerButton = 1;
+const int pressThreshold = 500;
 
 // Sorties LED des 9 boutons
 const int ledPins[numButtons] = {
@@ -24,24 +28,32 @@ const int ledPins[numButtons] = {
 
 Adafruit_NeoPixel* pixels[numButtons];
 
-// Couleur de base unique pour identifier les boutons
+// Couleurs de base pour identifier les boutons
 int colorIndex[numButtons] = {
-  0, // Bouton 1 -> Rouge
-  1, // Bouton 2 -> Vert
-  2, // Bouton 3 -> Bleu
-  3, // Bouton 4 -> Jaune
-  4, // Bouton 5 -> Magenta
-  5, // Bouton 6 -> Cyan
-  6, // Bouton 7 -> Orange
-  7, // Bouton 8 -> Violet
-  8  // Bouton 9 -> Blanc
+  0, // Rouge
+  1, // Vert
+  2, // Bleu
+  3, // Jaune
+  4, // Magenta
+  5, // Cyan
+  6, // Orange
+  7, // Violet
+  8  // Blanc
 };
 
 bool lastPressed[numButtons] = {false};
-bool lastBtConnected = false;
 
-// Ajuste ce seuil selon tes mesures
-const int pressThreshold = 500;
+// UUIDs BLE
+#define SERVICE_UUID        "12345678-1234-1234-1234-1234567890ab"
+#define RX_CHAR_UUID        "12345678-1234-1234-1234-1234567890ac"
+#define TX_CHAR_UUID        "12345678-1234-1234-1234-1234567890ad"
+
+BLEServer* pServer = nullptr;
+BLECharacteristic* pTxCharacteristic = nullptr;
+BLECharacteristic* pRxCharacteristic = nullptr;
+
+bool bleClientConnected = false;
+bool oldBleClientConnected = false;
 
 uint32_t getColor(Adafruit_NeoPixel& pixel, int index) {
   switch (index) {
@@ -91,35 +103,99 @@ void setAllBlue() {
   }
 }
 
-void nextColor(int buttonIndex) {
-  colorIndex[buttonIndex]++;
-  if (colorIndex[buttonIndex] > 8) {
-    colorIndex[buttonIndex] = 0;
+void setAllGreen() {
+  for (int i = 0; i < numButtons; i++) {
+    pixels[i]->setPixelColor(0, pixels[i]->Color(0, 255, 0));
+    pixels[i]->show();
   }
-
-  setButtonColor(buttonIndex, colorIndex[buttonIndex]);
-
-  Serial.print("Bouton ");
-  Serial.print(buttonIndex + 1);
-  Serial.print(" -> Couleur : ");
-  Serial.println(colorName(colorIndex[buttonIndex]));
 }
 
-void handleBluetoothStatus() {
-  bool connected = SerialBT.hasClient();
+void setAllRed() {
+  for (int i = 0; i < numButtons; i++) {
+    pixels[i]->setPixelColor(0, pixels[i]->Color(255, 0, 0));
+    pixels[i]->show();
+  }
+}
 
-  if (connected != lastBtConnected) {
-    lastBtConnected = connected;
+void notifyMessage(const String& msg) {
+  if (bleClientConnected && pTxCharacteristic != nullptr) {
+    pTxCharacteristic->setValue(msg.c_str());
+    pTxCharacteristic->notify();
+  }
+  Serial.println("TX -> " + msg);
+}
 
-    if (connected) {
-      Serial.println("Bluetooth connecte");
-      SerialBT.println("ESP32_CONNECTED");
-      setAllBlue();
-    } else {
-      Serial.println("Bluetooth deconnecte");
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) override {
+    bleClientConnected = true;
+    Serial.println("BLE client connecte");
+    setAllBlue();
+    notifyMessage("CONNECTED");
+  }
+
+  void onDisconnect(BLEServer* pServer) override {
+    bleClientConnected = false;
+    Serial.println("BLE client deconnecte");
+  }
+};
+
+class MyRxCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) override {
+    String cmd = pCharacteristic->getValue();
+    cmd.trim();
+
+    if (cmd.length() == 0) return;
+
+    Serial.print("RX <- ");
+    Serial.println(cmd);
+
+    if (cmd == "PING") {
+      notifyMessage("PONG");
+    } else if (cmd == "BASE") {
       restoreBaseColors();
+      notifyMessage("OK:BASE");
+    } else if (cmd == "BLUE") {
+      setAllBlue();
+      notifyMessage("OK:BLUE");
+    } else if (cmd == "GREEN") {
+      setAllGreen();
+      notifyMessage("OK:GREEN");
+    } else if (cmd == "RED") {
+      setAllRed();
+      notifyMessage("OK:RED");
+    } else {
+      notifyMessage("UNKNOWN_CMD");
     }
   }
+};
+
+void setupBLE() {
+  BLEDevice::init("LumiPaff-ESP32");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService* pService = pServer->createService(SERVICE_UUID);
+
+  pTxCharacteristic = pService->createCharacteristic(
+    TX_CHAR_UUID,
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pTxCharacteristic->addDescriptor(new BLE2902());
+
+  pRxCharacteristic = pService->createCharacteristic(
+    RX_CHAR_UUID,
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
+  );
+  pRxCharacteristic->setCallbacks(new MyRxCallbacks());
+
+  pService->start();
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->start();
+
+  Serial.println("BLE pret");
+  Serial.println("Nom BLE : LumiPaff-ESP32");
+  Serial.println("Advertising demarre");
 }
 
 void setup() {
@@ -133,48 +209,48 @@ void setup() {
     while (1);
   }
 
-  if (!SerialBT.begin("LumiPaff-ESP32")) {
-    Serial.println("Erreur : echec initialisation Bluetooth");
-    while (1);
-  }
-
   for (int i = 0; i < numButtons; i++) {
     pixels[i] = new Adafruit_NeoPixel(numPixelsPerButton, ledPins[i], NEO_GRB + NEO_KHZ800);
     pixels[i]->begin();
     pixels[i]->setBrightness(50);
     pixels[i]->clear();
     pixels[i]->show();
-
     setButtonColor(i, colorIndex[i]);
   }
 
-  Serial.println("=== Test 9 boutons LED avec MPR121 + Bluetooth ===");
+  setupBLE();
+
+  Serial.println("=== Test 9 boutons LED avec MPR121 + BLE ===");
   Serial.print("Seuil d'appui = ");
   Serial.println(pressThreshold);
-  Serial.println("Nom Bluetooth : LumiPaff-ESP32");
-  Serial.println("Attente d'une connexion...");
 }
 
 void loop() {
-  handleBluetoothStatus();
+  // Gestion reconnexion advertising après déconnexion
+  if (!bleClientConnected && oldBleClientConnected) {
+    delay(200);
+    pServer->startAdvertising();
+    restoreBaseColors();
+    Serial.println("Advertising redemarre");
+    oldBleClientConnected = bleClientConnected;
+  }
+
+  if (bleClientConnected && !oldBleClientConnected) {
+    oldBleClientConnected = bleClientConnected;
+  }
 
   for (int i = 0; i < numButtons; i++) {
     uint16_t value = cap.filteredData(i);
     bool isPressed = (value > pressThreshold);
 
-    // Détection sur front montant
     if (isPressed && !lastPressed[i]) {
-      nextColor(i);
-
       Serial.print("CH");
       Serial.print(i);
       Serial.print(" value=");
       Serial.println(value);
 
-      if (SerialBT.hasClient()) {
-        SerialBT.print("BTN:");
-        SerialBT.println(i + 1);
-      }
+      String msg = "BTN:" + String(i + 1);
+      notifyMessage(msg);
     }
 
     lastPressed[i] = isPressed;
