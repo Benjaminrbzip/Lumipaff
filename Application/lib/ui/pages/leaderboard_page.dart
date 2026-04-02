@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../res/colors.dart';
 import '../widgets/main_navigation_bar.dart';
 import '../../services/firebase_service.dart';
+import '../../services/auth_service.dart';
 
 class LeaderboardPage extends StatefulWidget {
   const LeaderboardPage({super.key});
@@ -12,6 +13,7 @@ class LeaderboardPage extends StatefulWidget {
 
 class _LeaderboardPageState extends State<LeaderboardPage> {
   int _selectedTabIndex = 0; // 0: Taupe, 1: Catch, 2: Simon, 3: Simon Hard
+  bool _isPersonal = false;
   bool _isLoading = true;
   List<Map<String, dynamic>> _leaderboardData = [];
 
@@ -38,6 +40,14 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
     } else {
       results = await db.getTopScores(mode);
     }
+
+    // Filtrer par utilisateur si mode perso
+    if (_isPersonal) {
+      final user = AuthService().currentUser;
+      if (user != null) {
+        results = results.where((item) => item['userId'] == user.uid).toList();
+      }
+    }
     
     if (mounted) {
       setState(() {
@@ -47,7 +57,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
     }
   }
 
-  Widget _buildTab(String title, int index) {
+  Widget _buildGameTab(String title, int index) {
     bool isActive = _selectedTabIndex == index;
     return GestureDetector(
       onTap: () {
@@ -56,7 +66,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
         _loadData();
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(20),
@@ -77,13 +87,58 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
     );
   }
 
-  Widget _buildScoreRow(int rank, String name, int scoreOrLevel, {int? level}) {
+  Widget _buildScopeToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: kCyanColor.withOpacity(0.3), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildScopeButton('Global', false),
+          _buildScopeButton('Perso', true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScopeButton(String label, bool isPersonal) {
+    bool isActive = _isPersonal == isPersonal;
+    return GestureDetector(
+      onTap: () {
+        if (_isPersonal == isPersonal) return;
+        setState(() => _isPersonal = isPersonal);
+        _loadData();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? kCyanColor.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? kCyanColor : Colors.white38,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScoreRow(int rank, String name, int scoreOrLevel, {int? level, bool isMe = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.transparent,
+        color: isMe ? kCyanColor.withOpacity(0.08) : Colors.transparent,
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: kCyanColor, width: 1.0),
+        border: Border.all(
+          color: isMe ? kPrimaryButtonColor : kCyanColor,
+          width: isMe ? 1.5 : 1.0,
+        ),
       ),
       child: Row(
         children: [
@@ -91,8 +146,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
             width: 44,
             child: Text(
               '$rank',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: isMe ? kPrimaryButtonColor : Colors.white,
                 fontSize: 22,
                 fontWeight: FontWeight.w400,
               ),
@@ -102,15 +157,16 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
           Expanded(
             child: Text(
               name,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: isMe ? kPrimaryButtonColor : Colors.white,
                 fontSize: 16,
+                fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (_selectedTabIndex == 1) // Afficher la colonne niveau pour Lumi Catch
+          if (_selectedTabIndex == 1)
             SizedBox(
               width: 50,
               child: Text(
@@ -126,8 +182,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
             child: Text(
               '$scoreOrLevel',
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: isMe ? kPrimaryButtonColor : Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -140,6 +196,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = AuthService().currentUser?.uid;
+
     return Scaffold(
       backgroundColor: kPrimaryBackgroundColor,
       bottomNavigationBar: const MainNavigationBar(currentIndex: 1),
@@ -160,23 +218,27 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Tabs
+            // Global / Perso toggle
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
+              child: _buildScopeToggle(),
+            ),
+            // Game tabs
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildTab('Lumi Taupe', 0),
+                  _buildGameTab('Taupe', 0),
                   const SizedBox(width: 8),
-                  _buildTab('Lumi Catch', 1),
+                  _buildGameTab('Catch', 1),
                   const SizedBox(width: 8),
-                  _buildTab('Simon', 2),
+                  _buildGameTab('Simon', 2),
                   const SizedBox(width: 8),
-                  _buildTab('Simon Hard', 3),
+                  _buildGameTab('Simon Hard', 3),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
             // Headers
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 8.0),
@@ -185,12 +247,16 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                   const SizedBox(width: 44, child: Text('Rank', style: TextStyle(color: kCyanColor, fontSize: 16))),
                   const SizedBox(width: 16),
                   const Expanded(child: Text('Player', style: TextStyle(color: kCyanColor, fontSize: 16))),
-                  if (_selectedTabIndex == 1) // Lumi Catch
+                  if (_selectedTabIndex == 1)
                     const SizedBox(width: 50, child: Text('Lvl', style: TextStyle(color: kCyanColor, fontSize: 16))),
-                   SizedBox(
-                     width: 60, 
-                     child: Text((_selectedTabIndex == 2 || _selectedTabIndex == 3) ? 'Level' : 'Score', style: const TextStyle(color: kCyanColor, fontSize: 16), textAlign: TextAlign.right)
-                   ),
+                  SizedBox(
+                    width: 60, 
+                    child: Text(
+                      (_selectedTabIndex == 2 || _selectedTabIndex == 3) ? 'Level' : 'Score',
+                      style: const TextStyle(color: kCyanColor, fontSize: 16),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -199,7 +265,12 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
               child: _isLoading 
                 ? const Center(child: CircularProgressIndicator(color: kCyanColor))
                 : _leaderboardData.isEmpty 
-                  ? const Center(child: Text('Aucun score pour le moment', style: TextStyle(color: Colors.white54)))
+                  ? Center(
+                      child: Text(
+                        _isPersonal ? 'Tu n\'as pas encore de score ici !' : 'Aucun score pour le moment',
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    )
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
                       itemCount: _leaderboardData.length,
@@ -207,7 +278,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                       itemBuilder: (context, index) {
                         final item = _leaderboardData[index];
                         final val = (_selectedTabIndex == 2 || _selectedTabIndex == 3) ? item['level'] ?? 0 : item['score'] ?? 0;
-                        return _buildScoreRow(index + 1, item['username'] ?? 'Joueur', val, level: item['level']);
+                        final isMe = currentUserId != null && item['userId'] == currentUserId;
+                        return _buildScoreRow(index + 1, item['username'] ?? 'Joueur', val, level: item['level'], isMe: isMe);
                       },
                     ),
             ),

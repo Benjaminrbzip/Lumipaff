@@ -370,43 +370,7 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
                     ),
                   ),
                 ),
-                const Spacer(flex: 1),
-                // Pod status indicators (read-only, no tap)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40.0),
-                  child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: GridView.builder(
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                      ),
-                      itemCount: 9,
-                      itemBuilder: (context, index) {
-                        bool isActive = _pods[index].state != 0;
-                        Color podColor = Colors.blueAccent.withOpacity(0.3);
-                        if (isActive) {
-                          podColor = _pods[index].state == 1 ? Colors.greenAccent : Colors.orangeAccent;
-                        }
-                        
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 100),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: podColor,
-                            boxShadow: isActive
-                                ? [BoxShadow(color: podColor.withOpacity(0.8), blurRadius: 16, spreadRadius: 2)]
-                                : null,
-                            border: Border.all(color: isActive ? Colors.white : Colors.transparent, width: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const Spacer(flex: 1),
+                const Spacer(flex: 2),
                 // Info text
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 40.0),
