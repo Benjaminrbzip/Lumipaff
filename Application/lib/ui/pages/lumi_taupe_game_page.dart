@@ -7,6 +7,7 @@ import '../widgets/game_countdown_overlay.dart';
 import '../widgets/game_over_screen.dart';
 import '../../services/firebase_service.dart';
 import '../../services/bluetooth_service.dart';
+import '../../services/audio_service.dart';
 
 class LumiTaupeGamePage extends StatefulWidget {
   const LumiTaupeGamePage({super.key});
@@ -27,7 +28,7 @@ class PodInfo {
 }
 
 class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
-  int _timeLeft = 45;
+  int _timeLeft = 30;
   Timer? _timer;
 
   int _score = 0;
@@ -55,6 +56,7 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
     _bleSubscription = AppBleService().buttonEvents.listen((event) {
       if (mounted && _gameStarted && !_gameOver) {
         int? btn = event['buttonValue'];
+        debugPrint("LumiTaupe -> Bouton reçu: $btn / Etat pod[${btn != null ? btn - 1 : '?'}] = ${btn != null ? _pods[btn - 1].state : '?' }");
         if (btn != null && btn >= 1 && btn <= 9) {
           _onBuzzerTap(btn - 1); // BTN:1 = index 0
         }
@@ -78,7 +80,7 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
   void _startGame() {
     AppBleService().sendCommand("TAUPE");
     setState(() {
-      _timeLeft = 45;
+      _timeLeft = 30;
       _score = 0;
       _multiplier = 1;
       _multiplierProgress = 0.0;
@@ -101,6 +103,9 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
         setState(() {
           _timeLeft--;
         });
+        if (_timeLeft == 5) {
+          AudioService().playSfx('audio/SFX/endTimer.mp3');
+        }
       } else {
         timer.cancel();
         _masterSpawnTimer?.cancel();
@@ -190,11 +195,13 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
 
       if (state == 1 || state == 2) {
         // HIT
+        AudioService().playSfx('audio/SFX/taupe-click.wav');
         if (state == 1) {
           _score += 10 * _multiplier;
         } else if (state == 2) {
           _score += 5 * _multiplier;
         }
+        debugPrint("LumiTaupe -> HIT: +${state == 1 ? 10 * _multiplier : 5 * _multiplier} pts! Score: $_score");
         
         if (_multiplier < _maxMultiplier) {
           _multiplierProgress += 1.0;
@@ -308,7 +315,7 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
                                   ),
                                 ),
                                 CircularProgressIndicator(
-                                  value: _timeLeft / 60.0,
+                                  value: _timeLeft / 30.0,
                                   strokeWidth: 8,
                                   backgroundColor: Colors.white10,
                                   valueColor: const AlwaysStoppedAnimation<Color>(kCyanColor),

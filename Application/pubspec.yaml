@@ -40,6 +40,7 @@ dependencies:
   firebase_database:
   flutter_blue_plus: ^2.2.1
   permission_handler: ^12.0.1
+  audioplayers: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,7 @@ flutter:
     - assets/icons/nav/
     - assets/icons/pod/
     - assets/icons/game/
+    - assets/audio/SFX/
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

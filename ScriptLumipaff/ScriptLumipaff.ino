@@ -30,7 +30,7 @@ Adafruit_NeoPixel* pixels[numButtons];
 
 // Couleurs de base : tous orange
 int colorIndex[numButtons] = {
-  6, 6, 6, 6, 6, 6, 6, 6, 6
+  5, 5, 5, 5, 5, 5, 5, 5, 5
 };
 
 bool lastPressed[numButtons] = {false};
