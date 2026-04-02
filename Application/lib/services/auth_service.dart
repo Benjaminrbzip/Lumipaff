@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 class AuthService {
@@ -88,6 +89,44 @@ class AuthService {
       }
     } catch (_) {}
     return 'Joueur';
+  }
+
+  /// Sauvegarder l'adresse MAC du pod associé
+  Future<void> savePodMac(String mac) async {
+    final user = currentUser;
+    if (user == null) return;
+    try {
+      await _db.child('users').child(user.uid).child('podMac').set(mac)
+          .timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('Erreur sauvegarde podMac: $e');
+    }
+  }
+
+  /// Récupérer l'adresse MAC du pod associé
+  Future<String?> getPodMac() async {
+    final user = currentUser;
+    if (user == null) return null;
+    try {
+      final snapshot = await _db.child('users').child(user.uid).child('podMac').get()
+          .timeout(const Duration(seconds: 5));
+      if (snapshot.exists && snapshot.value != null) {
+        return snapshot.value as String;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Supprimer le pod associé
+  Future<void> removePodMac() async {
+    final user = currentUser;
+    if (user == null) return;
+    try {
+      await _db.child('users').child(user.uid).child('podMac').remove()
+          .timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('Erreur suppression podMac: $e');
+    }
   }
 
   /// Map Firebase error codes to French messages

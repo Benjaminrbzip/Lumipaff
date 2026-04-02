@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class AppBleService {
   static final AppBleService _instance = AppBleService._internal();
@@ -44,6 +47,7 @@ class AppBleService {
     ) {
       if (state == BluetoothAdapterState.on) {
         startScan();
+        autoConnectSavedPod(); // Tentative d'auto-connexion au lancement
       }
     });
   }
@@ -146,10 +150,65 @@ class AppBleService {
     }
   }
 
+  /// Ajuster la luminosité (0-255)
+  Future<void> setBrightness(int value) async {
+    await sendCommand("BRIGHT:$value");
+  }
+
   Future<void> disconnectAll() async {
     for (var device in connectedDevicesNotifier.value) {
       await device.disconnect();
     }
     connectedDevicesNotifier.value = [];
+    _rxCharacteristic = null;
+  }
+
+  /// Connexion directe par adresse MAC (sans scan)
+  Future<bool> connectByMac(String macAddress) async {
+    try {
+      final device = BluetoothDevice.fromId(macAddress);
+      await connectToDevice(device);
+      return connectedDevicesNotifier.value.contains(device);
+    } catch (e) {
+      debugPrint("Erreur connexion par MAC: $e");
+      return false;
+    }
+  }
+
+  /// Auto-connexion au pod sauvegardé dans Firebase
+  Future<bool> autoConnectSavedPod() async {
+    try {
+      // Import dynamique impossible, on passe par le constructeur
+      final auth = _AuthServiceProxy();
+      final savedMac = await auth.getPodMac();
+      if (savedMac != null && savedMac.isNotEmpty) {
+        debugPrint("Auto-connexion au pod sauvegardé: $savedMac");
+        return await connectByMac(savedMac);
+      }
+    } catch (e) {
+      debugPrint("Erreur auto-connexion: $e");
+    }
+    return false;
+  }
+}
+
+/// Proxy léger pour éviter une dépendance circulaire
+class _AuthServiceProxy {
+  final _db = FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL: 'https://lumipaff-default-rtdb.europe-west1.firebasedatabase.app',
+  ).ref();
+
+  Future<String?> getPodMac() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    try {
+      final snapshot = await _db.child('users').child(user.uid).child('podMac').get()
+          .timeout(const Duration(seconds: 5));
+      if (snapshot.exists && snapshot.value != null) {
+        return snapshot.value as String;
+      }
+    } catch (_) {}
+    return null;
   }
 }

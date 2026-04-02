@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'app_routes.dart';
 import 'res/colors.dart';
+import 'services/bluetooth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,6 +12,9 @@ void main() async {
   // Determine initial route based on auth state
   final currentUser = FirebaseAuth.instance.currentUser;
   final initialRoute = currentUser != null ? AppRoutes.home : AppRoutes.login;
+  
+  // Initialisation du Bluetooth pour l'auto-connexion
+  AppBleService().init();
   
   runApp(LumiPaffApp(initialRoute: initialRoute));
 }

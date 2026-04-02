@@ -158,6 +158,16 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
 
     if (cmd == "PING") {
       notifyMessage("PONG");
+    } else if (cmd.startsWith("BRIGHT:")) {
+      int brightness = cmd.substring(7).toInt();
+      if (brightness < 0) brightness = 0;
+      if (brightness > 255) brightness = 255;
+      for (int i = 0; i < numButtons; i++) {
+        pixels[i]->setBrightness(brightness);
+        pixels[i]->show();
+      }
+      Serial.print("Luminosité réglée à : ");
+      Serial.println(brightness);
     } else if (cmd == "BASE") {
       inCatchMode = false;
       gameMode = 0;
@@ -327,7 +337,7 @@ void setup() {
   for (int i = 0; i < numButtons; i++) {
     pixels[i] = new Adafruit_NeoPixel(numPixelsPerButton, ledPins[i], NEO_GRB + NEO_KHZ800);
     pixels[i]->begin();
-    pixels[i]->setBrightness(50);
+    pixels[i]->setBrightness(255); // Luminosité maximale par défaut
     pixels[i]->clear();
     pixels[i]->show();
     setButtonColor(i, colorIndex[i]);

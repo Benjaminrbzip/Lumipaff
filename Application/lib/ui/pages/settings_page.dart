@@ -18,22 +18,65 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   double _volume = 0.8;
+  double _ledBrightness = 255.0; // Par défaut à 100%
   final AppBleService _bleService = AppBleService();
+  String? _savedPodMac;
+  bool _isLoadingSaved = true;
 
   @override
   void initState() {
     super.initState();
     _bleService.init();
+    _loadSavedPod().then((_) {
+      _bleService.autoConnectSavedPod();
+    });
   }
 
-  Widget _buildPodWidget(String name, bool isConnected, {VoidCallback? onTap}) {
+  Future<void> _loadSavedPod() async {
+    final mac = await AuthService().getPodMac();
+    if (mounted) {
+      setState(() {
+        _savedPodMac = mac;
+        _isLoadingSaved = false;
+      });
+    }
+  }
+
+  Future<void> _saveCurrentPod(String mac) async {
+    await AuthService().savePodMac(mac);
+    if (mounted) {
+      setState(() {
+        _savedPodMac = mac;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pod enregistré comme favori !')),
+      );
+    }
+  }
+
+  Future<void> _removeCurrentPod() async {
+    await AuthService().removePodMac();
+    if (mounted) {
+      setState(() {
+        _savedPodMac = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Favori supprimé !')),
+      );
+    }
+  }
+
+  Widget _buildPodWidget(String name, bool isConnected, bool isSaved, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
       decoration: BoxDecoration(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kCyanColor, width: 2),
+        border: Border.all(
+          color: isSaved ? Colors.amber : kCyanColor, 
+          width: isSaved ? 3 : 2,
+        ),
       ),
       child: Stack(
         children: [
@@ -41,9 +84,10 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Text(
               name,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white, 
+              style: TextStyle(
+                color: isSaved ? Colors.amber : Colors.white, 
                 fontSize: 14,
+                fontWeight: isSaved ? FontWeight.bold : FontWeight.normal,
                 height: 1.3,
               ),
             ),
@@ -51,10 +95,20 @@ class _SettingsPageState extends State<SettingsPage> {
           Positioned(
             top: 8,
             right: 8,
-            child: SvgPicture.asset(
-              isConnected ? AppAssets.iconBluetooth : AppAssets.iconErrorX,
-              width: 14,
-              height: 14,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isSaved) ...[
+                  const Icon(Icons.star, color: Colors.amber, size: 14),
+                  const SizedBox(width: 4),
+                ],
+                SvgPicture.asset(
+                  isConnected ? AppAssets.iconBluetooth : AppAssets.iconErrorX,
+                  width: 14,
+                  height: 14,
+                  colorFilter: isSaved ? const ColorFilter.mode(Colors.amber, BlendMode.srcIn) : null,
+                ),
+              ],
             ),
           ),
         ],
@@ -108,9 +162,12 @@ class _SettingsPageState extends State<SettingsPage> {
                           if (index < deviceList.length) {
                             final device = deviceList[index];
                             final isConnected = connectedDevices.contains(device);
+                            final isSaved = device.remoteId.toString() == _savedPodMac;
+                            
                             return _buildPodWidget(
                               device.advName.isEmpty ? 'Pod\n${index + 1}' : device.advName.replaceAll('_', '\n'),
                               isConnected,
+                              isSaved,
                               onTap: () {
                                 if (!isConnected) {
                                   _bleService.connectToDevice(device);
@@ -119,7 +176,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             );
                           } else {
                             // Cases vides pour remplir la grille
-                            return _buildPodWidget('Vide', false);
+                            return _buildPodWidget('Vide', false, false);
                           }
                         },
                       );
@@ -127,6 +184,25 @@ class _SettingsPageState extends State<SettingsPage> {
                   );
                 },
               ),
+            ),
+            const SizedBox(height: 16),
+            ValueListenableBuilder<List<BluetoothDevice>>(
+              valueListenable: _bleService.connectedDevicesNotifier,
+              builder: (context, connectedDevices, _) {
+                if (connectedDevices.isEmpty) return const SizedBox.shrink();
+                
+                final currentDevice = connectedDevices.first;
+                final isSaved = currentDevice.remoteId.toString() == _savedPodMac;
+                
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                  child: SecondaryButton(
+                    label: isSaved ? 'Retirer ce favori' : 'Enregistrer ce Pod',
+                    color: isSaved ? Colors.redAccent : kCyanColor,
+                    onPressed: () => isSaved ? _removeCurrentPod() : _saveCurrentPod(currentDevice.remoteId.toString()),
+                  ),
+                );
+              },
             ),
             const Spacer(),
             // Volume Slider
@@ -160,6 +236,48 @@ class _SettingsPageState extends State<SettingsPage> {
                           setState(() {
                             _volume = val;
                           });
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            // LED Brightness Slider
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
+              child: Row(
+                children: [
+                  const Text(
+                    'LEDs :',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: Colors.amber,
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: Colors.amber,
+                        trackHeight: 12.0,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
+                        overlayColor: Colors.amber.withOpacity(0.2),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 20.0),
+                      ),
+                      child: Slider(
+                        value: _ledBrightness,
+                        min: 0.0,
+                        max: 255.0,
+                        onChanged: (val) {
+                          setState(() {
+                            _ledBrightness = val;
+                          });
+                          _bleService.setBrightness(val.toInt());
                         },
                       ),
                     ),
