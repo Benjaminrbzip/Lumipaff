@@ -56,6 +56,7 @@ bool bleClientConnected = false;
 bool oldBleClientConnected = false;
 
 bool inCatchMode = false;
+uint32_t currentOuterColor = 0;
 
 uint32_t getColor(Adafruit_NeoPixel& pixel, int index) {
   switch (index) {
@@ -125,7 +126,7 @@ void setCatchMode() {
     pixels[i]->setPixelColor(0, pixels[i]->Color(0, 0, 0));
     pixels[i]->show();
   }
-  pixels[4]->setPixelColor(0, pixels[4]->Color(255, 169, 77)); // Milieu statique R,G,B
+  pixels[4]->setPixelColor(0, pixels[4]->Color(255, 80, 0)); // Milieu Orange pur
   pixels[4]->show();
 }
 
@@ -185,20 +186,16 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
     } else if (cmd.startsWith("IDX:")) {
       if (inCatchMode) {
         int idx = cmd.substring(4).toInt();
-        // Eteindre tout sauf le milieu
+        // Définir la couleur globale du tour en fonction de la position du jeu (3,5->Vert, Reste->Rouge)
+        if (idx == 3 || idx == 5) currentOuterColor = pixels[0]->Color(0, 255, 0); // Vert
+        else currentOuterColor = pixels[0]->Color(255, 0, 0); // Rouge
+
+        // Appliquer cette couleur à TOUT le contour
         for (int i = 0; i < numButtons; i++) {
           if (i != 4) {
-            pixels[i]->setPixelColor(0, pixels[i]->Color(0, 0, 0));
+            pixels[i]->setPixelColor(0, currentOuterColor);
             pixels[i]->show();
           }
-        }
-        // Allumer la cible selon les règles du jeu (3,5->Vert, Res->Rouge)
-        if (idx >= 0 && idx < 9 && idx != 4) {
-           uint32_t c;
-           if (idx == 3 || idx == 5) c = pixels[idx]->Color(0, 255, 0); // Vert
-           else c = pixels[idx]->Color(255, 0, 0); // Rouge
-           pixels[idx]->setPixelColor(0, c);
-           pixels[idx]->show();
         }
       }
     } else {
@@ -298,7 +295,7 @@ void loop() {
            pixels[pin]->setPixelColor(0, pixels[pin]->Color(255,255,255));
            pixels[pin]->show();
            delay(20);
-           pixels[pin]->setPixelColor(0, pixels[pin]->Color(0,0,0));
+           pixels[pin]->setPixelColor(0, currentOuterColor); // On remet la vraie couleur au lieu du noir !
            pixels[pin]->show();
         }
       }
