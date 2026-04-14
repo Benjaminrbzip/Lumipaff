@@ -66,6 +66,26 @@ uint32_t getColor(Adafruit_NeoPixel& pixel, int index) {
   }
 }
 
+uint32_t getSimonColor(int index, bool bright) {
+    if (index < 0 || index >= 9) return 0;
+    int r = 0, g = 0, b = 0;
+    switch (index) {
+        case 0: r = 255; g = 0;   b = 0;   break; // Red
+        case 1: r = 0;   g = 255; b = 0;   break; // Green
+        case 2: r = 0;   g = 0;   b = 255; break; // Blue
+        case 3: r = 255; g = 255; b = 0;   break; // Yellow
+        case 4: r = 0;   g = 255; b = 255; break; // Cyan
+        case 5: r = 255; g = 0;   b = 255; break; // Magenta
+        case 6: r = 255; g = 120; b = 0;   break; // Orange
+        case 7: r = 255; g = 255; b = 255; break; // White
+        case 8: r = 140; g = 0;   b = 255; break; // Violet
+    }
+    if (!bright) {
+        r /= 5; g /= 5; b /= 5; // Appliquer un facteur de réduction pour le mode "dim"
+    }
+    return pixels[index]->Color(r, g, b);
+}
+
 const char* colorName(int index) {
   switch (index) {
     case 0: return "Rouge";
@@ -232,28 +252,22 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
     } else if (cmd == "SIMON") {
       inCatchMode = false;
       gameMode = 3;
-      for (int i = 0; i < numButtons; i++) { pixels[i]->setPixelColor(0, pixels[i]->Color(0,0,0)); }
-      pixels[1]->setPixelColor(0, pixels[1]->Color(50,0,0)); // Dim Red
-      pixels[3]->setPixelColor(0, pixels[3]->Color(0,50,0)); // Dim Green
-      pixels[4]->setPixelColor(0, pixels[4]->Color(50,50,0)); // Dim Yellow
-      pixels[5]->setPixelColor(0, pixels[5]->Color(0,0,50)); // Dim Blue
-      pixels[7]->setPixelColor(0, pixels[7]->Color(50,0,50)); // Dim Magenta
-      for (int i = 0; i < numButtons; i++) pixels[i]->show();
+      for (int i = 0; i < numButtons; i++) {
+          if (i == 1 || i == 3 || i == 4 || i == 5 || i == 7) {
+              pixels[i]->setPixelColor(0, getSimonColor(i, false));
+          } else {
+              pixels[i]->setPixelColor(0, pixels[i]->Color(0,0,0));
+          }
+          pixels[i]->show();
+      }
       notifyMessage("OK:SIMON");
     } else if (cmd == "SIMON_HARD") {
       inCatchMode = false;
       gameMode = 4;
-      // 9 couleurs dim uniques
-      pixels[0]->setPixelColor(0, pixels[0]->Color(50,0,0));     // Dim Red
-      pixels[1]->setPixelColor(0, pixels[1]->Color(0,50,0));     // Dim Green
-      pixels[2]->setPixelColor(0, pixels[2]->Color(0,0,50));     // Dim Blue
-      pixels[3]->setPixelColor(0, pixels[3]->Color(50,50,0));    // Dim Yellow
-      pixels[4]->setPixelColor(0, pixels[4]->Color(0,50,50));    // Dim Cyan
-      pixels[5]->setPixelColor(0, pixels[5]->Color(50,0,50));    // Dim Magenta
-      pixels[6]->setPixelColor(0, pixels[6]->Color(50,25,0));    // Dim Orange
-      pixels[7]->setPixelColor(0, pixels[7]->Color(50,50,50));   // Dim White
-      pixels[8]->setPixelColor(0, pixels[8]->Color(25,0,50));    // Dim Violet
-      for (int i = 0; i < numButtons; i++) pixels[i]->show();
+      for (int i = 0; i < numButtons; i++) {
+          pixels[i]->setPixelColor(0, getSimonColor(i, false));
+          pixels[i]->show();
+      }
       notifyMessage("OK:SIMON_HARD");
     } else if (cmd.startsWith("S:")) {
       int firstColon = cmd.indexOf(':', 2);
@@ -261,30 +275,7 @@ class MyRxCallbacks : public BLECharacteristicCallbacks {
         int idx = cmd.substring(2, firstColon).toInt();
         int state = cmd.substring(firstColon + 1).toInt();
         if (idx >= 0 && idx < 9) {
-           // Couleurs bright et dim pour chaque bouton
-           uint32_t brightColors[9] = {
-             pixels[0]->Color(255,0,0),     // Red
-             pixels[1]->Color(0,255,0),     // Green
-             pixels[2]->Color(0,0,255),     // Blue
-             pixels[3]->Color(255,255,0),   // Yellow
-             pixels[4]->Color(0,255,255),   // Cyan
-             pixels[5]->Color(255,0,255),   // Magenta
-             pixels[6]->Color(255,120,0),   // Orange
-             pixels[7]->Color(255,255,255), // White
-             pixels[8]->Color(140,0,255)    // Violet
-           };
-           uint32_t dimColors[9] = {
-             pixels[0]->Color(50,0,0),
-             pixels[1]->Color(0,50,0),
-             pixels[2]->Color(0,0,50),
-             pixels[3]->Color(50,50,0),
-             pixels[4]->Color(0,50,50),
-             pixels[5]->Color(50,0,50),
-             pixels[6]->Color(50,25,0),
-             pixels[7]->Color(50,50,50),
-             pixels[8]->Color(25,0,50)
-           };
-           pixels[idx]->setPixelColor(0, (state == 1) ? brightColors[idx] : dimColors[idx]);
+           pixels[idx]->setPixelColor(0, getSimonColor(idx, state == 1));
            pixels[idx]->show();
         }
       }
@@ -327,7 +318,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Wire.begin(23, 22); // SDA, SCL selon ton shield
+  Wire.begin(23, 22);
 
   if (!cap.begin(0x5B)) {
     Serial.println("Erreur : MPR121 non detecte sur 0x5B");

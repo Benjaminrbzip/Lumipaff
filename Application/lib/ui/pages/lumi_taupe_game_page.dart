@@ -8,6 +8,7 @@ import '../widgets/game_over_screen.dart';
 import '../../services/firebase_service.dart';
 import '../../services/bluetooth_service.dart';
 import '../../services/audio_service.dart';
+import '../../services/audio_service.dart';
 
 class LumiTaupeGamePage extends StatefulWidget {
   const LumiTaupeGamePage({super.key});
@@ -165,7 +166,7 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
     setState(() {
       _pods[targetIndex].state = 1; // GREEN
     });
-    AppBleService().sendCommand("T:$targetIndex:1"); // Vert sur l'ERP
+    AppBleService().sendCommand("T:$targetIndex:1"); // Vert sur l'ESP
 
     int greenDuration = (_moleLifeTimeMs * 0.6).round();
     int orangeDuration = (_moleLifeTimeMs * 0.4).round();
@@ -175,14 +176,14 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
       setState(() {
         _pods[targetIndex].state = 2; // ORANGE
       });
-      AppBleService().sendCommand("T:$targetIndex:2"); // Orange sur l'ERP
+      AppBleService().sendCommand("T:$targetIndex:2"); // Orange sur l'ESP
 
       _pods[targetIndex].orangeTimer = Timer(Duration(milliseconds: orangeDuration), () {
         if (!mounted || _pods[targetIndex].state != 2) return;
         setState(() {
           _pods[targetIndex].state = 0; // OFF
         });
-        AppBleService().sendCommand("T:$targetIndex:0"); // Bleu (repos) sur l'ERP
+        AppBleService().sendCommand("T:$targetIndex:0"); // Bleu (repos) sur l'ESP
       });
     });
   }
@@ -382,7 +383,7 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 40.0),
                   child: Text(
-                    'Appuie sur les boutons de l\'ERP !',
+                    'Appuie sur les boutons de l\'ESP !',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white24,
@@ -398,6 +399,7 @@ class _LumiTaupeGamePageState extends State<LumiTaupeGamePage> {
                   child: SecondaryButton(
                     label: 'Stop Game',
                     onPressed: () {
+                      AudioService().playSfx('audio/SFX/electronichit.mp3');
                       Navigator.pop(context);
                     },
                   ),

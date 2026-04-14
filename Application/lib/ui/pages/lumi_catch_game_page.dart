@@ -8,6 +8,7 @@ import '../widgets/game_countdown_overlay.dart';
 import '../widgets/game_over_screen.dart';
 import '../../services/firebase_service.dart';
 import '../../services/bluetooth_service.dart';
+import '../../services/audio_service.dart';
 
 class GameLevel {
   final List<int> pattern;
@@ -58,62 +59,8 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
     PatternDef([0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1], 1.0),
     PatternDef([0, 1, 2, 3, 4, 5, 6, 7, 8], 1.0),
     PatternDef([8, 7, 6, 5, 4, 3, 2, 1, 0], 1.0),
-    PatternDef([
-      0,
-      1,
-      0,
-      1,
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      7,
-      8,
-      7,
-      8,
-      7,
-      6,
-      5,
-      4,
-      3,
-      2,
-      1,
-    ], 1.35),
-    PatternDef([
-      0,
-      1,
-      2,
-      3,
-      2,
-      1,
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      7,
-      6,
-      5,
-      6,
-      7,
-      8,
-      7,
-      6,
-      5,
-      4,
-      3,
-      2,
-      1,
-    ], 1.2),
+    PatternDef([0, 1, 0, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8, 7, 6, 5,  4, 3, 2, 1,], 1.35),
+    PatternDef([ 0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1,], 1.2),
     PatternDef([4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5], 1.0),
   ];
 
@@ -195,16 +142,19 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
     setState(() {
       if (_lightIndex == 4) {
         // Bleu — succès parfait
+        AudioService().playSfx('audio/SFX/correct.mp3');
         _score += 30;
         _flashBackground(Colors.blueAccent.withOpacity(0.3));
         _pauseAndContinue(success: true);
       } else if (_lightIndex == 3 || _lightIndex == 5) {
         // Vert — succès
+        AudioService().playSfx('audio/SFX/correct.mp3');
         _score += 20;
         _flashBackground(Colors.greenAccent.withOpacity(0.3));
         _pauseAndContinue(success: true);
       } else {
         // Rouge — raté
+        AudioService().playSfx('audio/SFX/negatif.mp3');
         _lives--;
         _flashBackground(Colors.red.withOpacity(0.3));
         if (_lives <= 0) {
@@ -218,7 +168,7 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
           );
           setState(() => _gameOver = true);
         } else {
-          // Pause de 1s pour voir la couleur rouge sur l'ERP
+          // Pause de 1s pour voir la couleu sur l'ESP
           _pauseAndContinue(success: false);
         }
       }
@@ -444,6 +394,7 @@ class _LumiCatchGamePageState extends State<LumiCatchGamePage> {
                     child: SecondaryButton(
                       label: 'Stop Game',
                       onPressed: () {
+                        AudioService().playSfx('audio/SFX/electronichit.mp3');
                         _isPlaying = false;
                         Navigator.pop(context);
                       },

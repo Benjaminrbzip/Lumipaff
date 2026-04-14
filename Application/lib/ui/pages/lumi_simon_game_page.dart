@@ -8,6 +8,7 @@ import '../widgets/game_countdown_overlay.dart';
 import '../widgets/game_over_screen.dart';
 import '../../services/firebase_service.dart';
 import '../../services/bluetooth_service.dart';
+import '../../services/audio_service.dart';
 
 enum SimonPhase { memorise, reproduit, showResult }
 enum SimonDifficulty { normal, hard }
@@ -41,15 +42,15 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
   // Rotation de la flèche (base = pointe à gauche)
   // Pour tourner : haut=π/2, droite=π, bas=-π/2, diagonales en conséquence
   static const Map<int, double> arrowRotations = {
-    0: math.pi / 4,       // ↖ haut-gauche
-    1: math.pi / 2,       // ▲ haut
-    2: 3 * math.pi / 4,   // ↗ haut-droite
-    3: 0,                 // ◀ gauche (défaut)
+    0: math.pi / 4,
+    1: math.pi / 2,
+    2: 3 * math.pi / 4,
+    3: 0,
     // 4 = centre, pas de flèche
-    5: math.pi,           // ▶ droite
-    6: -math.pi / 4,      // ↙ bas-gauche
-    7: -math.pi / 2,      // ▼ bas
-    8: -3 * math.pi / 4,  // ↘ bas-droite
+    5: math.pi,
+    6: -math.pi / 4,
+    7: -math.pi / 2,
+    8: -3 * math.pi / 4,
   };
 
   SimonDifficulty? _difficulty; // null = pas encore choisi
@@ -76,6 +77,7 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
   @override
   void initState() {
     super.initState();
+    AudioService().pauseMusic();
     _bleSubscription = AppBleService().buttonEvents.listen((event) {
       if (mounted && _gameStarted && !_gameOver && _phase == SimonPhase.reproduit) {
         int? btn = event['buttonValue'];
@@ -91,6 +93,7 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
 
   @override
   void dispose() {
+    AudioService().resumeMusic();
     AppBleService().sendCommand("BASE");
     _bleSubscription?.cancel();
     _displayTimer?.cancel();
@@ -143,6 +146,7 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
           int btn = _sequence[stepIndex];
 
           setState(() => _highlightedButton = btn);
+          AudioService().playSimonNote(btn);
           AppBleService().sendCommand("S:$btn:1");
 
           Future.delayed(Duration(milliseconds: (delayMs * 0.6).round()), () {
@@ -154,12 +158,17 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
           stepIndex++;
         } else {
           timer.cancel();
-          Future.delayed(Duration(milliseconds: delayMs), () {
+          // Dès que le dernier son est fini (environ la moitié du délai), on passe en phase "à toi"
+          int finishDelay = (delayMs * 0.7).round();
+          Future.delayed(Duration(milliseconds: finishDelay), () {
             if (!mounted || _gameOver) return;
+            // Flash visuel pour indiquer le début du tour : SIMON réinitialise tout
+            AppBleService().sendCommand(_difficulty == SimonDifficulty.hard ? "SIMON_HARD" : "SIMON");
             setState(() {
               _phase = SimonPhase.reproduit;
               _playerStep = 0;
             });
+            debugPrint("Simon -> Début du tour joueur (Phase Reproduit) - Niveau $_level");
           });
         }
       });
@@ -170,7 +179,10 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
     if (_phase != SimonPhase.reproduit || _gameOver) return;
 
     setState(() => _highlightedButton = buttonIndex);
+    AudioService().playSimonNote(buttonIndex);
     AppBleService().sendCommand("S:$buttonIndex:1");
+    debugPrint("Simon -> Joueur presse: $buttonIndex (Attendu: ${_sequence[_playerStep]})");
+
     Future.delayed(const Duration(milliseconds: 200), () {
       if (!mounted) return;
       setState(() => _highlightedButton = null);
@@ -190,6 +202,7 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
         });
       }
     } else {
+      debugPrint("Simon -> ERREUR: Joueur presse $buttonIndex mais ${_sequence[_playerStep]} était attendu.");
       _displayTimer?.cancel();
       AppBleService().sendCommand("BASE");
       FirebaseService().saveScore(gameMode: _firebaseMode, level: _level);
@@ -312,6 +325,7 @@ class _LumiSimonGamePageState extends State<LumiSimonGamePage> {
                   child: SecondaryButton(
                     label: 'Stop Game',
                     onPressed: () {
+                      AudioService().playSfx('audio/SFX/electronichit.mp3');
                       Navigator.pop(context);
                     },
                   ),

@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/bluetooth_service.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../../app_routes.dart';
+import '../../services/audio_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -17,7 +18,8 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  double _volume = 0.8;
+  double _musicVolume = AudioService().musicVolume;
+  double _sfxVolume = AudioService().sfxVolume;
   double _ledBrightness = 255.0; // Par défaut à 100%
   final AppBleService _bleService = AppBleService();
   String? _savedPodMac;
@@ -55,6 +57,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _removeCurrentPod() async {
+    AudioService().playSfx('audio/SFX/electronichit.mp3');
     await AuthService().removePodMac();
     if (mounted) {
       setState(() {
@@ -206,13 +209,13 @@ class _SettingsPageState extends State<SettingsPage> {
                 },
               ),
               const SizedBox(height: 24),
-              // Volume Slider
+              // Music Volume Slider
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40.0),
                 child: Row(
                   children: [
                     const Text(
-                      'Volume :',
+                      'Musique :',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -226,17 +229,58 @@ class _SettingsPageState extends State<SettingsPage> {
                           activeTrackColor: kCyanColor,
                           inactiveTrackColor: Colors.white24,
                           thumbColor: kCyanColor,
-                          trackHeight: 12.0, // thick track as in mockup
+                          trackHeight: 12.0,
                           thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
                           overlayColor: kCyanColor.withOpacity(0.2),
                           overlayShape: const RoundSliderOverlayShape(overlayRadius: 20.0),
                         ),
                         child: Slider(
-                          value: _volume,
+                          value: _musicVolume,
                           onChanged: (val) {
                             setState(() {
-                              _volume = val;
+                              _musicVolume = val;
                             });
+                            AudioService().setMusicVolume(val);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // SFX Volume Slider
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Effets :',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          activeTrackColor: kPrimaryButtonColor,
+                          inactiveTrackColor: Colors.white24,
+                          thumbColor: kPrimaryButtonColor,
+                          trackHeight: 12.0,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
+                          overlayColor: kPrimaryButtonColor.withOpacity(0.2),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 20.0),
+                        ),
+                        child: Slider(
+                          value: _sfxVolume,
+                          onChanged: (val) {
+                            setState(() {
+                              _sfxVolume = val;
+                            });
+                            AudioService().setSfxVolume(val);
                           },
                         ),
                       ),
@@ -294,6 +338,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   label: 'Déconnexion',
                   color: Colors.redAccent,
                   onPressed: () async {
+                    AudioService().playSfx('audio/SFX/electronichit.mp3');
                     await AuthService().signOut();
                     if (!context.mounted) return;
                     Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (_) => false);

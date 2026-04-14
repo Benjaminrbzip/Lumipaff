@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../res/colors.dart';
 import 'secondary_button.dart';
+import '../../services/audio_service.dart';
 
 /// A reusable full-screen game recap overlay.
 /// Displays [score] and/or [level] depending on what is provided.
-class GameOverScreen extends StatelessWidget {
+class GameOverScreen extends StatefulWidget {
   final int? score;
   final int? level;
   final String gameName;
@@ -17,6 +18,18 @@ class GameOverScreen extends StatelessWidget {
     required this.gameName,
     required this.onExit,
   });
+
+  @override
+  State<GameOverScreen> createState() => _GameOverScreenState();
+}
+
+class _GameOverScreenState extends State<GameOverScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Jouer le son négatif dès que l'écran de fin apparaît
+    AudioService().playSfx('audio/SFX/negatif.mp3');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +57,7 @@ class GameOverScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              gameName,
+              widget.gameName,
               style: const TextStyle(
                 color: Colors.white38,
                 fontSize: 18,
@@ -80,7 +93,7 @@ class GameOverScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 28),
-                  if (score != null) ...[
+                  if (widget.score != null) ...[
                     const Text(
                       'Score',
                       style: TextStyle(
@@ -91,7 +104,7 @@ class GameOverScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$score',
+                      '${widget.score}',
                       style: const TextStyle(
                         color: kPrimaryButtonColor,
                         fontSize: 56,
@@ -105,9 +118,9 @@ class GameOverScreen extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (score != null && level != null) 
+                  if (widget.score != null && widget.level != null) 
                     const SizedBox(height: 28),
-                  if (level != null) ...[
+                  if (widget.level != null) ...[
                     const Text(
                       'Level',
                       style: TextStyle(
@@ -118,7 +131,7 @@ class GameOverScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$level',
+                      '${widget.level}',
                       style: const TextStyle(
                         color: kCyanColor,
                         fontSize: 56,
@@ -141,7 +154,10 @@ class GameOverScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 40.0),
               child: SecondaryButton(
                 label: 'Retour',
-                onPressed: onExit,
+                onPressed: () {
+                  AudioService().playSfx('audio/SFX/electronichit.mp3');
+                  widget.onExit();
+                },
               ),
             ),
             const SizedBox(height: 32),
